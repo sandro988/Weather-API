@@ -1,0 +1,23 @@
+# Web framework and server
+fastapi>=0.100.0
+uvicorn>=0.23.0
+
+# AWS SDK and async support
+boto3>=1.28.0
+aiobotocore>=2.5.0
+
+# Configuration management
+pydantic-settings>=2.0.1
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# Test coverage packages
+pytest==8.3.3
+httpx==0.27.2
+pytest-cov==6.0.0
+
+# Packages for pre-commit
+flake8==7.1.1
+isort==5.13.2
+black==24.10.0
