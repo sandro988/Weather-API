@@ -62,3 +62,7 @@ def setup_logging(
         logging.getLogger(lib).setLevel(logging.WARNING)
 
     return logger
+
+
+# Logger setup
+logger = setup_logging(log_level="INFO", logger_name="fastapi_app")

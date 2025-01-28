@@ -3,10 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 
-from src.config.logger import setup_logging
-
-# Logger setup
-logger = setup_logging(log_level="INFO", logger_name="fastapi_app")
+from src.config.logger import logger
 
 
 @asynccontextmanager
