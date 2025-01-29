@@ -5,9 +5,24 @@ from typing import Annotated
 from fastapi import FastAPI, Query, Request
 
 from src.config.logger import logger
-from src.middlewares.exception_handlers import weather_fetch_error_handler
+from src.middlewares.exception_handlers import (
+    cache_error_handler,
+    storage_connection_error_handler,
+    storage_data_error_handler,
+    storage_error_handler,
+    storage_permission_error_handler,
+    weather_fetch_error_handler,
+)
+from src.services.storage_service import StorageService
 from src.services.weather_service import WeatherService
-from src.utils.exceptions import WeatherFetchError
+from src.utils.exceptions import (
+    CacheError,
+    StorageConnectionError,
+    StorageDataError,
+    StorageError,
+    StoragePermissionError,
+    WeatherFetchError,
+)
 
 
 @asynccontextmanager
@@ -26,6 +41,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.add_exception_handler(WeatherFetchError, weather_fetch_error_handler)
+app.add_exception_handler(StorageError, storage_error_handler)
+app.add_exception_handler(StorageConnectionError, storage_connection_error_handler)
+app.add_exception_handler(StorageDataError, storage_data_error_handler)
+app.add_exception_handler(StoragePermissionError, storage_permission_error_handler)
+app.add_exception_handler(CacheError, cache_error_handler)
 
 
 @app.middleware("http")
@@ -64,19 +84,47 @@ async def get_weather(
             examples=["London", "New York", "São Paulo", "Tbilisi"],
         ),
     ],
-):
+) -> dict:
     """
     Fetch current weather data for a specified city.
 
-    param:
-        city: Name of the city (letters and spaces only (supports accented characters))
+    Args:
+        city: Name of the city (letters, spaces, and accented characters only)
 
     Returns:
-        Dict containing weather data including temperature, humidity,
-        wind speed, and description
+        dict: Weather data including temperature, humidity, wind speed, and description
+
+    Raises:
+        StoragePermissionError: If there are permission issues with the storage service
+        WeatherFetchError: If weather data cannot be retrieved
     """
 
     logger.info(f"Processing weather request for city: {city}")
-    weather_data = await WeatherService.fetch_weather_data(city)
 
-    return weather_data
+    try:
+        try:
+            cached_data = await StorageService.get_recent_weather_data(city)
+            if cached_data:
+                logger.info(f"Returning cached weather data for {city}")
+                return cached_data
+        except CacheError as e:
+            logger.warning(f"Cache retrieval failed for {city}: {str(e)}")
+
+        weather_data = await WeatherService.fetch_weather_data(city)
+
+        try:
+            await StorageService.upload_json_to_storage(city, weather_data)
+        except StorageError as e:
+            # Log storage error but still return the weather data
+            logger.error(f"Failed to store weather data for {city}: {str(e)}")
+
+        return weather_data
+
+    except StoragePermissionError as e:
+        logger.error(f"Storage permission error for {city}: {str(e)}")
+        raise
+    except Exception as e:
+        logger.error(
+            f"Unexpected error processing weather request for {city}: {str(e)}"
+        )
+        raise
