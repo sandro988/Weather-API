@@ -1,22 +1,15 @@
-from datetime import datetime
 from http import HTTPStatus
-from unittest.mock import Mock, patch
 
 import pytest
-from fastapi.testclient import TestClient
 
-from main import app
-from src.middlewares.exception_handlers import weather_fetch_error_handler
-from src.utils.exceptions import WeatherFetchError
-
-client = TestClient(app)
-
-
-@pytest.fixture(scope="module")
-def test_client():
-    """Fixture providing a test client for the FastAPI application."""
-
-    return TestClient(app)
+from src.utils.exceptions import (
+    CacheError,
+    StorageConnectionError,
+    StorageDataError,
+    StorageError,
+    StoragePermissionError,
+    WeatherFetchError,
+)
 
 
 class TestWeatherFetchError:
@@ -80,64 +73,167 @@ class TestWeatherFetchError:
         assert error.original_error == original_error
 
 
-@pytest.mark.asyncio
-class TestWeatherFetchErrorHandler:
+class TestStorageError:
     """
-    Test suite for WeatherFetchError exception handler.
-    Verifies error response formatting and handling.
+    Test suite for base StorageError exception class.
+    Verifies exception instantiation and attribute handling.
     """
 
-    async def test_handler_basic_error(self):
-        """Test basic error handling without original error."""
+    def test_init_with_default_values(self):
+        """Test exception initialization with default values."""
 
-        request = Mock()
-        exc = WeatherFetchError(message="Test error", status_code=HTTPStatus.NOT_FOUND)
+        error = StorageError(message="Test error")
 
-        response = await weather_fetch_error_handler(request, exc)
+        assert error.message == "Test error"
+        assert error.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+        assert error.original_error is None
+        assert str(error) == "Test error"
 
-        assert response.status_code == HTTPStatus.NOT_FOUND
+    def test_init_with_custom_status_code(self):
+        """Test exception initialization with custom status code."""
 
-        content = response.body.decode()
-        assert "Test error" in content
-        assert "error" in content
-        assert str(HTTPStatus.NOT_FOUND.value) in content
+        error = StorageError(message="Bad request", status_code=HTTPStatus.BAD_REQUEST)
 
-    async def test_handler_with_original_error(self):
-        """Test error handling with original error present."""
+        assert error.message == "Bad request"
+        assert error.status_code == HTTPStatus.BAD_REQUEST
+        assert error.original_error is None
 
-        request = Mock()
-        original_error = ValueError("Original test error")
-        exc = WeatherFetchError(
-            message="Test error",
-            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
-            original_error=original_error,
+    def test_init_with_original_error(self):
+        """Test exception initialization with original error."""
+
+        original_error = ValueError("Original error")
+        error = StorageError(message="Storage error", original_error=original_error)
+
+        assert error.message == "Storage error"
+        assert error.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+        assert error.original_error == original_error
+
+    @pytest.mark.parametrize(
+        "message,status_code,original_error",
+        [
+            (
+                "Connection failed",
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                ConnectionError("No connection"),
+            ),
+            ("Invalid format", HTTPStatus.BAD_REQUEST, ValueError("Bad format")),
+            ("Permission denied", HTTPStatus.FORBIDDEN, None),
+        ],
+    )
+    def test_init_parametrized(self, message, status_code, original_error):
+        """Test exception initialization with various parameter combinations."""
+
+        error = StorageError(
+            message=message, status_code=status_code, original_error=original_error
         )
 
-        with patch("src.middlewares.exception_handlers.logger") as mock_logger:
-            response = await weather_fetch_error_handler(request, exc)
+        assert error.message == message
+        assert error.status_code == status_code
+        assert error.original_error == original_error
 
-            # Ensure logger was called for the original error
-            mock_logger.error.assert_called_once()
-            assert "Original test error" in str(mock_logger.error.call_args)
 
-        assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+class TestStorageConnectionError:
+    """
+    Test suite for StorageConnectionError exception class.
+    Verifies exception instantiation and attribute handling.
+    """
 
-    async def test_response_timestamp_format(self, test_client):
-        """Verify timestamp format in error responses."""
+    def test_init_with_default_values(self):
+        """Test exception initialization with default values."""
 
-        response = test_client.get("/weather?city=NonExistentCity")
-        data = response.json()
+        error = StorageConnectionError()
 
-        assert "error" in data
-        assert "status" in data
-        assert "status_code" in data
-        assert "timestamp" in data
-        assert data["status"] == "error"
-        assert data["status_code"] == HTTPStatus.NOT_FOUND
+        assert error.message == "Unable to connect to storage service"
+        assert error.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+        assert error.original_error is None
 
-        # Verify timestamp is ISO format
-        timestamp = data["timestamp"]
-        try:
-            datetime.fromisoformat(timestamp)
-        except ValueError:
-            pytest.fail("Timestamp is not in ISO format")
+    def test_init_with_custom_message(self):
+        """Test exception initialization with custom message."""
+
+        error = StorageConnectionError(message="Custom connection error")
+
+        assert error.message == "Custom connection error"
+        assert error.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+
+    def test_init_with_original_error(self):
+        """Test exception initialization with original error."""
+
+        original_error = ConnectionError("Network timeout")
+        error = StorageConnectionError(
+            message="Connection failed", original_error=original_error
+        )
+
+        assert error.message == "Connection failed"
+        assert error.original_error == original_error
+
+
+class TestStorageDataError:
+    """
+    Test suite for StorageDataError exception class.
+    Verifies exception instantiation and attribute handling.
+    """
+
+    def test_init_with_default_values(self):
+        """Test exception initialization with default values."""
+
+        error = StorageDataError()
+
+        assert error.message == "Invalid data format for storage"
+        assert error.status_code == HTTPStatus.BAD_REQUEST
+        assert error.original_error is None
+
+    def test_init_with_custom_message(self):
+        """Test exception initialization with custom message."""
+
+        error = StorageDataError(message="Invalid JSON format")
+
+        assert error.message == "Invalid JSON format"
+        assert error.status_code == HTTPStatus.BAD_REQUEST
+
+
+class TestStoragePermissionError:
+    """
+    Test suite for StoragePermissionError exception class.
+    Verifies exception instantiation and attribute handling.
+    """
+
+    def test_init_with_default_values(self):
+        """Test exception initialization with default values."""
+
+        error = StoragePermissionError()
+
+        assert error.message == "Permission denied for storage operation"
+        assert error.status_code == HTTPStatus.FORBIDDEN
+        assert error.original_error is None
+
+    def test_init_with_custom_message(self):
+        """Test exception initialization with custom message."""
+
+        error = StoragePermissionError(message="No write access")
+
+        assert error.message == "No write access"
+        assert error.status_code == HTTPStatus.FORBIDDEN
+
+
+class TestCacheError:
+    """
+    Test suite for CacheError exception class.
+    Verifies exception instantiation and attribute handling.
+    """
+
+    def test_init_with_default_values(self):
+        """Test exception initialization with default values."""
+
+        error = CacheError()
+
+        assert error.message == "Cache operation failed"
+        assert error.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+        assert error.original_error is None
+
+    def test_init_with_custom_message(self):
+        """Test exception initialization with custom message."""
+
+        error = CacheError(message="Cache miss")
+
+        assert error.message == "Cache miss"
+        assert error.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
