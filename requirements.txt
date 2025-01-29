@@ -4,6 +4,7 @@ uvicorn>=0.23.0
 
 # AWS SDK and async support
 boto3>=1.28.0
+botocore>=1.28.0
 aiobotocore>=2.5.0
 
 # Configuration management
