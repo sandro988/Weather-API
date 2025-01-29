@@ -68,12 +68,6 @@ class StorageService:
     ) -> Tuple[str, str]:
         """Asynchronously upload weather data to S3."""
 
-        if not isinstance(weather_data, dict):
-            raise StorageDataError(message="Weather data must be a dictionary")
-
-        if not city or not isinstance(city, str):
-            raise StorageDataError(message="City name must be a non-empty string")
-
         storage_key = cls._generate_storage_key(city)
 
         try:
