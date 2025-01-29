@@ -6,6 +6,10 @@ from fastapi.responses import JSONResponse
 from src.config.logger import logger
 from src.utils.exceptions import (
     CacheError,
+    DynamoDBConnectionError,
+    DynamoDBDataError,
+    DynamoDBError,
+    DynamoDBPermissionError,
     StorageConnectionError,
     StorageDataError,
     StorageError,
@@ -103,4 +107,41 @@ async def cache_error_handler(request: Request, exc: CacheError):
 
     error_response = create_error_response(exc)
     logger.error(f"Cache error: {str(exc.message)}")
+    return JSONResponse(status_code=exc.status_code, content=error_response)
+
+
+async def dynamodb_error_handler(request: Request, exc: DynamoDBError):
+    """Handle general DynamoDB errors."""
+
+    error_response = create_error_response(exc)
+    if exc.original_error:
+        logger.error(f"DynamoDB error details: {str(exc.original_error)}")
+    return JSONResponse(status_code=exc.status_code, content=error_response)
+
+
+async def dynamodb_connection_error_handler(
+    request: Request, exc: DynamoDBConnectionError
+):
+    """Handle DynamoDB connection errors."""
+
+    error_response = create_error_response(exc)
+    logger.error(f"DynamoDB connection error: {str(exc.original_error)}")
+    return JSONResponse(status_code=exc.status_code, content=error_response)
+
+
+async def dynamodb_data_error_handler(request: Request, exc: DynamoDBDataError):
+    """Handle data validation and format errors for DynamoDB operations."""
+
+    error_response = create_error_response(exc)
+    logger.warning(f"DynamoDB data error: {str(exc.message)}")
+    return JSONResponse(status_code=exc.status_code, content=error_response)
+
+
+async def dynamodb_permission_error_handler(
+    request: Request, exc: DynamoDBPermissionError
+):
+    """Handle permission-related DynamoDB errors."""
+
+    error_response = create_error_response(exc)
+    logger.error(f"DynamoDB permission error: {str(exc.message)}")
     return JSONResponse(status_code=exc.status_code, content=error_response)
